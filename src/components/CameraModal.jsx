@@ -4,25 +4,25 @@ import { FaceMesh } from "@mediapipe/face_mesh";
 import { X } from "lucide-react";
 
 /**
- * CameraModal - subtle, realistic-looking face scanner UI
- * - draws meaningful landmarks on actual face position
- * - auto-captures after a short stable detection period
+ * CameraModal
+ * - Subtle, professional face scanner UI
+ * - Uses MediaPipe FaceMesh
+ * - Auto-captures after stable detection + short countdown
  *
  * Props:
  *  - open (bool)
  *  - onClose()
  *  - onCapture(dataUrl)
  */
-
 export default function CameraModal({ open, onClose, onCapture }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
 
   const [countdown, setCountdown] = useState(0);
-  const [status, setStatus] = useState("Position face inside the guide");
+  const [status, setStatus] = useState("Position the face inside the guide");
   const [captured, setCaptured] = useState(false);
 
-  // refs for cleanup & stable detection state (avoid stale closures)
+  // internal refs
   const mediaCameraRef = useRef(null);
   const faceMeshRef = useRef(null);
   const streamRef = useRef(null);
@@ -33,11 +33,6 @@ export default function CameraModal({ open, onClose, onCapture }) {
   useEffect(() => {
     if (!open) return;
 
-    // Important indices — now includes eyebrow nodes (8 eyebrow/important indices total)
-    // left eye (33), right eye (263), nose tip (1),
-    // mouth corners (61, 291), jaw/ears (234, 454),
-    // eyebrow-ish indices (added group) -> (63, 65, 70, 105) and (282, 285, 295, 300)
-    // We'll include an 8-index eyebrow set (some may overlap with other points).
     const eyebrowIndices = [63, 65, 70, 105, 282, 285, 295, 300];
     const importantIndices = [33, 263, 1, 61, 291, 234, 454, ...eyebrowIndices];
 
@@ -48,7 +43,7 @@ export default function CameraModal({ open, onClose, onCapture }) {
         setCaptured(false);
         capturedRef.current = false;
         setCountdown(0);
-        setStatus("Starting camera...");
+        setStatus("Starting camera…");
 
         // request camera
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -60,7 +55,7 @@ export default function CameraModal({ open, onClose, onCapture }) {
           videoRef.current.srcObject = stream;
         }
 
-        // instantiate FaceMesh
+        // setup FaceMesh
         const fm = new FaceMesh({
           locateFile: (file) =>
             `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
@@ -74,7 +69,6 @@ export default function CameraModal({ open, onClose, onCapture }) {
           minTrackingConfidence: 0.5,
         });
 
-        // reset stable counter
         stableCountRef.current = 0;
 
         fm.onResults((results) => {
@@ -84,43 +78,43 @@ export default function CameraModal({ open, onClose, onCapture }) {
           if (!canvas || !video) return;
           const ctx = canvas.getContext("2d");
 
-          // size canvas to video
           canvas.width = video.videoWidth || 640;
           canvas.height = video.videoHeight || 480;
 
-          // clear
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-          // draw video frame (use results.image if available because MediaPipe may provide processed image)
-          if (results.image) ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-          else ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          if (results.image) {
+            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+          } else {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          }
 
-          // improved, slightly smaller & clearly oval guide
+          // oval guide
           ctx.beginPath();
           const cx = canvas.width / 2;
-          const cy = canvas.height / 2 - canvas.height * 0.03; // slightly up for natural framing
-          const ox = canvas.width * 0.20; // narrower horizontally (smaller)
-          const oy = canvas.height * 0.37; // taller relative -> more oval
-          const rotation = -0.03; // small tilt for a natural look
+          const cy = canvas.height / 2 - canvas.height * 0.03;
+          const ox = canvas.width * 0.20;
+          const oy = canvas.height * 0.37;
+          const rotation = -0.03;
           ctx.ellipse(cx, cy, ox, oy, rotation, 0, Math.PI * 2);
           ctx.lineWidth = 2.4;
-          ctx.strokeStyle = "rgba(160,140,255,0.30)";
+          ctx.strokeStyle = "rgba(56,189,248,0.35)"; // sky-400
           ctx.stroke();
 
-          // draw faint inner ring for guidance
           ctx.beginPath();
           ctx.ellipse(cx, cy, ox - 6, oy - 8, rotation, 0, Math.PI * 2);
           ctx.lineWidth = 1;
-          ctx.strokeStyle = "rgba(160,140,255,0.12)";
+          ctx.strokeStyle = "rgba(56,189,248,0.15)";
           ctx.stroke();
 
-          // draw detection helpers only if a face is found
-          const hasFace = results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0;
+          const hasFace =
+            results.multiFaceLandmarks &&
+            results.multiFaceLandmarks.length > 0;
 
           if (hasFace) {
             const lm = results.multiFaceLandmarks[0];
 
-            // subtle connecting line between left eye -> nose -> right eye
+            // soft line: left eye → nose → right eye
             ctx.beginPath();
             const pts = [33, 1, 263];
             pts.forEach((i, idx) => {
@@ -132,50 +126,46 @@ export default function CameraModal({ open, onClose, onCapture }) {
               else ctx.lineTo(x, y);
             });
             ctx.lineWidth = 1;
-            ctx.strokeStyle = "rgba(160,140,255,0.22)";
+            ctx.strokeStyle = "rgba(56,189,248,0.25)";
             ctx.stroke();
 
-            // draw nodes at important indices (including eyebrow cluster)
+            // landmark dots
             importantIndices.forEach((i) => {
               const p = lm[i];
               if (!p) return;
               const x = p.x * canvas.width;
               const y = p.y * canvas.height;
 
-              // subtle outer glow
               ctx.beginPath();
-              ctx.arc(x, y, 5.8, 0, Math.PI * 2);
-              ctx.fillStyle = "rgba(160,140,255,0.06)";
+              ctx.arc(x, y, 5.5, 0, Math.PI * 2);
+              ctx.fillStyle = "rgba(56,189,248,0.08)";
               ctx.fill();
 
-              // inner dot
               ctx.beginPath();
-              ctx.arc(x, y, 2.6, 0, Math.PI * 2);
-              ctx.fillStyle = "rgba(160,140,255,0.95)";
+              ctx.arc(x, y, 2.4, 0, Math.PI * 2);
+              ctx.fillStyle = "rgba(56,189,248,0.95)";
               ctx.fill();
 
-              // subtle stroke
               ctx.lineWidth = 0.8;
-              ctx.strokeStyle = "rgba(255,255,255,0.16)";
+              ctx.strokeStyle = "rgba(255,255,255,0.18)";
               ctx.stroke();
             });
 
-            // face is present — update stable counter (cap to avoid runaway)
-            stableCountRef.current = Math.min(99, stableCountRef.current + 1);
+            // stable detection
+            stableCountRef.current = Math.min(
+              99,
+              stableCountRef.current + 1
+            );
 
-            // If face is stable for several frames, start countdown (unless already capturing)
             if (stableCountRef.current >= 3 && !capturedRef.current) {
-              if (countdownTimerRef.current == null) {
-                // start 3-second countdown for snappier UX
+              if (!countdownTimerRef.current) {
                 setCountdown(3);
-                setStatus("Stable face detected — capturing soon");
+                setStatus("Face detected — hold still for a moment");
                 countdownTimerRef.current = setInterval(() => {
                   setCountdown((prev) => {
                     if (prev <= 1) {
-                      // final capture
                       clearInterval(countdownTimerRef.current);
                       countdownTimerRef.current = null;
-                      // guard against double-capture
                       if (!capturedRef.current) captureNow();
                       return 0;
                     }
@@ -183,22 +173,21 @@ export default function CameraModal({ open, onClose, onCapture }) {
                   });
                 }, 1000);
               }
+            } else {
+              setStatus("Face detected — hold still");
             }
-
-            setStatus("Face detected — hold still");
           } else {
-            // no face: reset stable counter and cancel countdown
             stableCountRef.current = 0;
             if (countdownTimerRef.current) {
               clearInterval(countdownTimerRef.current);
               countdownTimerRef.current = null;
             }
             setCountdown(0);
-            setStatus("No face detected — align within guide");
+            setStatus("No face detected — align within the guide");
           }
-        }); // fm.onResults
+        });
 
-        // camera processing via MediaPipe Camera util
+        // MediaPipe camera utils (dynamic import)
         const mp = await import("@mediapipe/camera_utils");
         const MP_Camera = mp.Camera;
         const mediaCamera = new MP_Camera(videoRef.current, {
@@ -217,11 +206,10 @@ export default function CameraModal({ open, onClose, onCapture }) {
         console.error("Camera/FaceMesh error:", err);
         setStatus("Camera unavailable or permission denied");
       }
-    }; // start()
+    };
 
     start();
 
-    // cleanup when modal closes or unmounts
     return () => {
       mounted = false;
       try {
@@ -242,7 +230,7 @@ export default function CameraModal({ open, onClose, onCapture }) {
           faceMeshRef.current = null;
         }
       } catch (e) {
-        // ignore minor cleanup errors
+        // ignore cleanup errors
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -251,8 +239,8 @@ export default function CameraModal({ open, onClose, onCapture }) {
   const captureNow = () => {
     const v = videoRef.current;
     if (!v) return;
-    // guard to prevent re-entry
-    if (capturedRef.current) return;
+    if (capturedRef.current) return; // prevent double capture
+
     capturedRef.current = true;
     setCaptured(true);
 
@@ -260,12 +248,11 @@ export default function CameraModal({ open, onClose, onCapture }) {
     c.width = v.videoWidth || 640;
     c.height = v.videoHeight || 480;
     const ctx = c.getContext("2d");
-    // draw current frame from video element (non-mirrored)
     ctx.drawImage(v, 0, 0, c.width, c.height);
     const dataUrl = c.toDataURL("image/jpeg", 0.9);
-    setStatus("Captured");
+    setStatus("Face captured");
 
-    // stop/cleanup sources safely
+    // cleanup
     try {
       if (countdownTimerRef.current) {
         clearInterval(countdownTimerRef.current);
@@ -284,57 +271,67 @@ export default function CameraModal({ open, onClose, onCapture }) {
         faceMeshRef.current = null;
       }
     } catch (e) {
-      // ignore cleanup errors
+      // ignore
     }
 
-    // give a short delay for UX then return the capture
     setTimeout(() => {
       onCapture?.(dataUrl);
       onClose?.();
     }, 350);
   };
 
+  const handleClose = () => {
+    // manual close should also clean up
+    try {
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+        countdownTimerRef.current = null;
+      }
+      if (mediaCameraRef.current) {
+        mediaCameraRef.current.stop();
+        mediaCameraRef.current = null;
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+      if (faceMeshRef.current) {
+        faceMeshRef.current.close?.();
+        faceMeshRef.current = null;
+      }
+    } catch (e) {
+      // ignore
+    }
+    onClose?.();
+  };
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/65">
-      <div className="w-full max-w-2xl bg-black/45 rounded-2xl p-4 border border-violet-800/30">
-        <div className="flex justify-between items-center mb-2">
-          <h3 className="text-violet-300 font-semibold">Face Scanner</h3>
+    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/70">
+      <div className="w-full max-w-2xl bg-slate-900/80 rounded-2xl p-4 border border-sky-500/40 shadow-xl backdrop-blur">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-sky-100 font-semibold text-sm md:text-base">
+            Face Scanner
+          </h3>
           <button
-            onClick={() => {
-              // ensure cleanup then close
-              try {
-                if (countdownTimerRef.current) {
-                  clearInterval(countdownTimerRef.current);
-                  countdownTimerRef.current = null;
-                }
-                if (mediaCameraRef.current) {
-                  mediaCameraRef.current.stop();
-                  mediaCameraRef.current = null;
-                }
-                if (streamRef.current) {
-                  streamRef.current.getTracks().forEach((t) => t.stop());
-                  streamRef.current = null;
-                }
-                if (faceMeshRef.current) {
-                  faceMeshRef.current.close?.();
-                  faceMeshRef.current = null;
-                }
-              } catch (e) {}
-              onClose?.();
-            }}
-            className="text-gray-300"
+            onClick={handleClose}
+            className="text-slate-200 hover:text-white"
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="relative overflow-hidden rounded-lg">
-          {/* hidden raw video (processing source) */}
-          <video ref={videoRef} autoPlay playsInline muted style={{ display: "none" }} />
-
-          {/* canvas shows both video and overlay */}
+        <div className="relative overflow-hidden rounded-lg bg-black">
+          {/* hidden raw video (source for MediaPipe) */}
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{ display: "none" }}
+          />
+          {/* canvas shows webcam + overlay */}
           <canvas
             ref={canvasRef}
             className="w-full rounded-md bg-black"
@@ -342,12 +339,16 @@ export default function CameraModal({ open, onClose, onCapture }) {
           />
         </div>
 
-        <div className="mt-3 flex items-center justify-between">
-          <div className="text-sm text-gray-300">{status}</div>
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <div className="text-xs md:text-sm text-slate-200">{status}</div>
           {!captured ? (
-            <div className="text-sm text-violet-300 font-medium">{countdown > 0 ? `${countdown}s` : "—"}</div>
+            <div className="text-xs md:text-sm text-sky-300 font-medium">
+              {countdown > 0 ? `${countdown}s` : " "}
+            </div>
           ) : (
-            <div className="text-sm text-green-400 font-medium">Captured ✓</div>
+            <div className="text-xs md:text-sm text-emerald-400 font-semibold">
+              Captured ✓
+            </div>
           )}
         </div>
       </div>

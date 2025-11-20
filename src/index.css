@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global page background (light blue glass) */
+:root {
+  --glass-bg: rgba(255,255,255,0.06);
+  --glass-border: rgba(255,255,255,0.08);
+  --accent: #3B82F6;
+  --text: #0f172a;
+}
+
+/* Page background gradient */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* glass card helper */
+.glass-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(8px);
+}
+
+/* small utility to reduce white flash on scroll */
+body, #root {
+  min-height: 100vh;
+}
+
+/* follower dot (small) default size */
+.cursor-follower {
+  transition: transform 120ms linear;
+  will-change: transform;
+}
